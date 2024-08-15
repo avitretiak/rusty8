@@ -1,8 +1,7 @@
 use rand::Rng;
-use crate::drivers::input_driver::InputState;
 
 pub struct CPU {
-    pub keys: [bool; 16],
+    pub keypad: [bool; 16],
     pub memory: [u8; 4096],
     pub registers: [u8; 16],
     pub index: u16,
@@ -24,7 +23,7 @@ pub struct Renderer {
 impl CPU {
     pub fn new() -> Self {
         CPU {
-            keys: [false; 16],
+            keypad: [false; 16],
             memory: [0; 4096],
             registers: [0; 16],
             index: 0,
@@ -46,13 +45,15 @@ impl CPU {
         self.memory[0x200..0x200 + rom_data.len()].copy_from_slice(rom_data);
     }
 
-    pub fn tick(&mut self, input_state: &InputState) {
+    pub fn tick(&mut self, keypad: [bool; 16]) {
+        self.keypad = keypad;
         if let Some(register) = self.waiting_for_key {
             for key in 0..=0xF {
-                if input_state.is_key_pressed(key) {
-                    self.registers[register] = key;
+                if self.keypad[key] {
+                    self.registers[register] = key as u8;
                     self.waiting_for_key = None;
-                    break;
+                    self.program_counter += 2; // Move to the next instruction
+                    return;
                 }
             }
         } else {
@@ -60,7 +61,7 @@ impl CPU {
                 | self.memory[(self.program_counter + 1) as usize] as u16;
 
             self.program_counter += 2;
-            self.execute_opcode(opcode, input_state);
+            self.execute_opcode(opcode);
         }
     }
 
@@ -73,31 +74,52 @@ impl CPU {
         }
     }
 
-    pub fn execute_opcode(&mut self, opcode: u16, input_state: &InputState) {
-        match opcode & 0xF000 {
-            0x0000 => match opcode & 0x00FF {
-                0xE0 => self.clear_display(),
-                0xEE => self.return_from_subroutine(),
-                _ => (),
-            },
-            0x1000 => self.jump(opcode),
-            0x2000 => self.call(opcode),
-            0x3000 => self.skip_if_x_equal(opcode),
-            0x4000 => self.skip_if_x_not_equal(opcode),
-            0x5000 => self.skip_if_x_and_y_equal(opcode),
-            0x6000 => self.set_x(opcode),
-            0x7000 => self.add_x(opcode),
-            0x8000 => self.arithmetic(opcode),
-            0x9000 => self.skip_if_x_and_y_different(opcode),
-            0xA000 => self.set_index(opcode),
-            0xB000 => self.jump_with_offset(opcode),
-            0xC000 => self.random(opcode),
-            0xD000 => self.draw_sprite(opcode),
-            0xE000 => self.skip_if_pressed(opcode),
-            0xF000 => self.misc(opcode),
-            _ => (),
-        }
-    }
+    pub fn execute_opcode(&mut self, opcode: u16) {
+         let nibbles = (
+             (opcode & 0xF000) >> 12,
+             (opcode & 0x0F00) >> 8,
+             (opcode & 0x00F0) >> 4,
+             opcode & 0x000F,
+         );
+
+         match nibbles {
+             (0x00, 0x00, 0x0e, 0x00) => self.clear_display(),
+             (0x00, 0x00, 0x0e, 0x0e) => self.return_from_subroutine(),
+             (0x01, _, _, _) => self.jump(opcode),
+             (0x02, _, _, _) => self.call(opcode),
+             (0x03, _, _, _) => self.skip_if_x_equal(opcode),
+             (0x04, _, _, _) => self.skip_if_x_not_equal(opcode),
+             (0x05, _, _, 0x00) => self.skip_if_x_and_y_equal(opcode),
+             (0x06, _, _, _) => self.set_x(opcode),
+             (0x07, _, _, _) => self.add_x(opcode),
+             (0x08, _, _, 0x00) => self.arithmetic(opcode),
+             (0x08, _, _, 0x01) => self.arithmetic(opcode),
+             (0x08, _, _, 0x02) => self.arithmetic(opcode),
+             (0x08, _, _, 0x03) => self.arithmetic(opcode),
+             (0x08, _, _, 0x04) => self.arithmetic(opcode),
+             (0x08, _, _, 0x05) => self.arithmetic(opcode),
+             (0x08, _, _, 0x06) => self.arithmetic(opcode),
+             (0x08, _, _, 0x07) => self.arithmetic(opcode),
+             (0x08, _, _, 0x0e) => self.arithmetic(opcode),
+             (0x09, _, _, 0x00) => self.skip_if_x_and_y_different(opcode),
+             (0x0a, _, _, _) => self.set_index(opcode),
+             (0x0b, _, _, _) => self.jump_with_offset(opcode),
+             (0x0c, _, _, _) => self.random(opcode),
+             (0x0d, _, _, _) => self.draw_sprite(opcode),
+             (0x0e, _, 0x09, 0x0e) => self.skip_if_pressed(opcode),
+             (0x0e, _, 0x0a, 0x01) => self.skip_if_not_pressed(opcode),
+             (0x0f, _, 0x00, 0x07) => self.misc(opcode),
+             (0x0f, _, 0x00, 0x0a) => self.misc(opcode),
+             (0x0f, _, 0x01, 0x05) => self.misc(opcode),
+             (0x0f, _, 0x01, 0x08) => self.misc(opcode),
+             (0x0f, _, 0x01, 0x0e) => self.misc(opcode),
+             (0x0f, _, 0x02, 0x09) => self.misc(opcode),
+             (0x0f, _, 0x03, 0x03) => self.misc(opcode),
+             (0x0f, _, 0x05, 0x05) => self.misc(opcode),
+             (0x0f, _, 0x06, 0x05) => self.misc(opcode),
+             _ => (),
+         }
+     }
 
      fn clear_display(&mut self) {
          self.renderer.buffer = [[false; 64]; 32];
@@ -247,21 +269,21 @@ impl CPU {
 
     fn skip_if_pressed(&mut self, opcode: u16) {
         let x = ((opcode & 0x0F00) >> 8) as usize;
-        if self.keys[self.registers[x] as usize] {
+        if self.keypad[self.registers[x] as usize] {
             self.program_counter += 2;
         }
     }
 
     fn skip_if_not_pressed(&mut self, opcode: u16) {
         let x = ((opcode & 0x0F00) >> 8) as usize;
-        if !self.keys[self.registers[x] as usize] {
+        if !self.keypad[self.registers[x] as usize] {
             self.program_counter += 2;
         }
     }
 
     fn wait_for_key_press(&mut self, opcode: u16) {
         let x = ((opcode & 0x0F00) >> 8) as usize;
-        if let Some(key) = self.keys.iter().position(|&k| k) {
+        if let Some(key) = self.keypad.iter().position(|&k| k) {
             self.registers[x] = key as u8;
         } else {
             self.program_counter -= 2; // Repeat this instruction until a key is pressed
@@ -284,20 +306,7 @@ impl CPU {
             _ => (),
         }
     }
-
-    pub fn handle_key_press(&mut self, key: u8) {
-        self.keys[key as usize] = true;
-        if let Some(register) = self.waiting_for_key {
-            self.registers[register] = key;
-            self.waiting_for_key = None;
-            self.program_counter += 2; // Move to the next instruction
-        }
-    }
-
-    pub fn handle_key_release(&mut self, key: u8) {
-        self.keys[key as usize] = false;
-    }
-
+    
     fn set_x_to_delay(&mut self, opcode: u16) {
         let x = ((opcode & 0x0F00) >> 8) as usize;
         self.registers[x] = self.delay_timer;

@@ -16,7 +16,8 @@
 
  fn main() -> Result<(), String> {
     let sdl_context = sdl2::init().unwrap();
-     let mut input_driver = InputDriver::new(&sdl_context);
+     let event_pump = sdl_context.event_pump()?;
+     let mut input_driver = InputDriver::new(event_pump);
      let args: Vec<String> = env::args().collect();
      if args.len() != 2 {
          return Err("Usage: cargo run <path_to_rom>".to_string());
@@ -32,7 +33,6 @@
          .map_err(|e| e.to_string())?;
 
      let mut canvas = window.into_canvas().build().map_err(|e| e.to_string())?;
-     let mut event_pump = sdl_context.event_pump()?;
      let audio_subsystem = sdl_context.audio().map_err(|e| e.to_string())?;
 
      let audio_spec = AudioSpecDesired {
@@ -55,15 +55,16 @@
      let mut beep_start_time: Option<Instant> = None;
 
      'running: loop {
-         if let Ok(keypad) = input_driver.poll() {
-             cpu.tick(keypad);
-         } else {
-             break 'running;
-         }
+         let keypad = match input_driver.poll() {
+             Ok(keypad) => keypad,
+             Err(_) => break 'running,
+         };
+
+         cpu.tick(keypad);
 
          let now = Instant::now();
          if now.duration_since(last_tick_time) >= Duration::from_micros(1000000 / 500) {
-             cpu.tick(&input_state);
+             cpu.tick(keypad);
              last_tick_time = now;
          }
 
