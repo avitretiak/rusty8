@@ -1,5 +1,5 @@
 use rand::Rng;
- use std::collections::HashSet;
+use std::collections::HashSet;
 
  pub struct CPU {
      pub memory: [u8; 4096],
@@ -61,7 +61,7 @@ use rand::Rng;
          }
      }
 
-     fn execute_opcode(&mut self, opcode: u16) {
+     pub fn execute_opcode(&mut self, opcode: u16) {
          match opcode & 0xF000 {
              0x0000 => match opcode & 0x00FF {
                  0xE0 => self.clear_display(),
@@ -108,18 +108,18 @@ use rand::Rng;
      }
 
      fn skip_if_x_equal(&mut self, opcode: u16) {
-         let x = ((opcode & 0x0F00) >> 8) as usize;
-         let nn = (opcode & 0x00FF) as u8;
-         if self.registers[x] == nn {
-             self.program_counter += 2;
-         }
-     }
+        let x = ((opcode & 0x0F00) >> 8) as usize;
+        let nn = (opcode & 0x00FF) as u8;
+        if self.registers[x] == nn {
+            self.program_counter += 2;
+        }
+    }
 
      fn skip_if_x_not_equal(&mut self, opcode: u16) {
          let x = ((opcode & 0x0F00) >> 8) as usize;
          let nn = (opcode & 0x00FF) as u8;
          if self.registers[x] != nn {
-             self.program_counter += 2;
+            self.program_counter += 2;
          }
      }
 
@@ -282,7 +282,7 @@ use rand::Rng;
 
      fn set_sound_to_x(&mut self, opcode: u16) {
          let x = ((opcode & 0x0F00) >> 8) as usize;
-         // Implement sound timer logic here if needed
+         self.sound_timer = self.registers[x];
      }
 
      fn add_x_to_index(&mut self, opcode: u16) {
@@ -315,20 +315,6 @@ use rand::Rng;
          for i in 0..=x {
              self.registers[i] = self.memory[(self.index + i as u16) as usize];
          }
-     }
-
-     fn push(&mut self, value: u16) {
-         self.stack[self.stack_pointer as usize] = value;
-         self.stack_pointer += 1;
-     }
-
-     fn pop(&mut self) -> u16 {
-         self.stack_pointer -= 1;
-         self.stack[self.stack_pointer as usize]
-     }
-
-     fn fetch(&self) -> u8 {
-         self.memory[self.program_counter as usize]
      }
 
      pub fn handle_key_event(&mut self, key: u8, is_pressed: bool) {
