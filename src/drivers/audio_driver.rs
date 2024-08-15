@@ -47,7 +47,7 @@ impl AudioCallback for SineWave {
 
             *x = (self.phase * 2.0 * PI).sin() * self.volume * envelope;
             self.phase = (self.phase + self.frequency / SAMPLE_RATE as f32) % 1.0;
-            
+
             self.sample_count += 1;
             if self.sample_count >= self.duration {
                 *x = 0.0;

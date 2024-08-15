@@ -1,7 +1,6 @@
-use sdl2::keyboard::Keycode;
 use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
 use sdl2::EventPump;
-
 
 pub struct InputDriver {
     events: EventPump,
@@ -19,7 +18,8 @@ impl InputDriver {
             };
         }
 
-        let keys: Vec<Keycode> = self.events
+        let keys: Vec<Keycode> = self
+            .events
             .keyboard_state()
             .pressed_scancodes()
             .filter_map(Keycode::from_scancode)
